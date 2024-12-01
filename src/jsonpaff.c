@@ -113,6 +113,31 @@ int getNextObject(Substring obj, Substring *output) {
     return OBJECT_NOT_FOUND_ERROR;
 }
 
+// Returns the complete next element found, must start from the first object's char
+int getNext(Substring obj, Substring *output) {
+    int error = 0;
+    if (*obj.ptr == '{' || *obj.ptr == '[') {
+        error = getNextObject(obj, output);
+        if (error != 0) {
+            printf("error code '%d' in getNextObject\n", error);
+        }
+        return error;
+    }
+    if (*obj.ptr == '"') {
+        error = getNextText(obj, output);
+        if (error != 0) {
+            printf("error code '%d' in getNextText\n", error);
+        }
+        return error;
+    }
+    error = getNextNumber(obj, output);
+    if (error != 0) {
+        printf("error code '%d' in getNextNumber\n", error);
+    }
+    return error;
+
+}
+
 // Returns a component of a list with the 'index' number
 int getSubscript(Substring obj, int idx, Substring *output) {
     int error = 0;
@@ -143,31 +168,6 @@ int getSubscript(Substring obj, int idx, Substring *output) {
         }
     }
     return OBJECT_NOT_FOUND_ERROR;
-}
-
-// Returns the complete next element found, must start from the first object's char
-int getNext(Substring obj, Substring *output) {
-    int error = 0;
-    if (*obj.ptr == '{' || *obj.ptr == '[') {
-        error = getNextObject(obj, output);
-        if (error != 0) {
-            printf("error code '%d' in getNextObject\n", error);
-        }
-        return error;
-    }
-    if (*obj.ptr == '"') {
-        error = getNextText(obj, output);
-        if (error != 0) {
-            printf("error code '%d' in getNextText\n", error);
-        }
-        return error;
-    }
-    error = getNextNumber(obj, output);
-    if (error != 0) {
-        printf("error code '%d' in getNextNumber\n", error);
-    }
-    return error;
-
 }
 
 // 'output' an inner object with the 'prop' key, if error returns non zero
@@ -315,7 +315,7 @@ int recPath(Substring obj, Path *path, int path_idx, Substring *output) {
                 printf("error on getObject, code: %d\n", error);
                 return error;
             }
-            return recPath(*output, path, path++, output);
+            return recPath(*output, path, path_idx+1, output);
         }
         if (path->segs[path_idx].type == SUBSCRIPT) {
             PathSeg seg = path->segs[path_idx];
@@ -329,7 +329,7 @@ int recPath(Substring obj, Path *path, int path_idx, Substring *output) {
                 printf("error on getSubscript, code: %d\n", error);
                 return error;
             }
-            return recPath(*output, path, path++, output);
+            return recPath(*output, path, path_idx+1, output);
         }
         return NOT_IMPLEMENTED_ERROR;
     } else {
@@ -341,19 +341,21 @@ extern int getJSONPath(const char *obj, const char *JSONPath, char output[]) {
     int error = 0;
     Substring result = {NULL, 0};
     Path path;
-    error = parsePath((Substring){JSONPath, strlen(JSONPath)}, &path);
+    error = parsePath((Substring){(char*)JSONPath, strlen(JSONPath)}, &path);
     if (error != 0) {
         printf("error parsePath code: %d\n", error);
         return error;
     }
-    error = recPath((Substring){obj, strlen(obj)}, &path, 0, &result);
+    error = recPath((Substring){(char*)obj, strlen(obj)}, &path, 0, &result);
     if (error != 0) {
         printf("error retriving object code: %d\n", error);
         return error;
     }
-    for (size_t i = 0; i < result.len; i++) {
-        output[i] = *(result.ptr + i);
-    }
+    // for (size_t i = 0; i < result.len; i++) {
+    //     output[i] = *(result.ptr + i);
+    // }
+    memcpy(output, result.ptr, result.len);
+    output[result.len] = 0;
     return 0;
 }
 
@@ -452,6 +454,46 @@ int test_parsePath() {
     return 0;
 }
 
+int test_getSubscript() {
+    int error = 0;
+    char* jstr = "[{\"bar\":2}, {\"bar\":3}, {\"bar\":4}]";
+    Substring result = {NULL, 0};
+    error = getSubscript((Substring){jstr, strlen(jstr)}, 1, &result);
+    assert(error == 0);
+    assert(eqlSubstringVerbose((Substring){jstr + 12, 9}, result));
+    return 0;
+}
+
+int test_getJSONPath() {
+    int error = 0;
+    char* jstr = "{\"input\": {\"hash\": 0, \"forward_hashes\": [1]}, \
+        \"processes\": [ \
+          {\"name\": \"foo\", \"python\": \"print('hello')\", \"hash\": 1, \"forward_hashes\": [2]}, \
+          {\"name\": \"bar\", \"python\": \"print('bie')\", \"hash\": 2, \"forward_hashes\": [2]}, \
+          {\"name\": \"iou\", \"python\": \"print('ciao')\", \"hash\": 3, \"forward_hashes\": [3]} \
+        ], \"outputs\": [{\"hash\": 2}]}";
+    
+    char result[2000];
+
+    char *path_1 = "$.input.hash";
+    error = getJSONPath(jstr, path_1, result);
+    assert(error == 0);
+    assert(strcmp(result, "0") == 0);
+
+    char *path_2 = "$.processes[1]";
+    error = getJSONPath(jstr, path_2, result);
+    assert(error == 0);
+    assert(strcmp(result, 
+        "{\"name\": \"bar\", \"python\": \"print('bie')\", \"hash\": 2, \"forward_hashes\": [2]}") == 0);
+
+    char *path_3 = "$.processes[2].forward_hashes[0]";
+    error = getJSONPath(jstr, path_3, result);
+    assert(error == 0);
+    assert(strcmp(result, "3") == 0);
+
+    return 0;
+}
+
 int run_all_test() {
     int all_tests = 0;
     int fail = 0;
@@ -467,6 +509,14 @@ int run_all_test() {
     fail = test_parsePath();
     all_tests += fail;
     if (fail) printf("test_parsePath failed\n");
+
+    fail = test_getSubscript();
+    all_tests += fail;
+    if (fail) printf("test_getSubscript failed\n");
+
+    fail = test_getJSONPath();
+    all_tests += fail;
+    if (fail) printf("test_getJSONPath failed\n");
 
     if (!all_tests) {
         printf("all tests OK\n");
