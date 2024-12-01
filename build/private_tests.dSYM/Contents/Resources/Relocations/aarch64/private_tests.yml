@@ -1,0 +1,22 @@
+---
+triple:          'arm64-apple-darwin'
+binary-path:     'build/private_tests'
+relocations:
+  - { offsetInCU: 0x26, offset: 0x26, size: 0x8, addend: 0x0, symName: _eqlSubstring, symObjAddr: 0x0, symBinAddr: 0x100001DF8, symSize: 0xB0 }
+  - { offsetInCU: 0x72, offset: 0x72, size: 0x8, addend: 0x0, symName: _eqlSubstring, symObjAddr: 0x0, symBinAddr: 0x100001DF8, symSize: 0xB0 }
+  - { offsetInCU: 0xC4, offset: 0xC4, size: 0x8, addend: 0x0, symName: _getNextNumber, symObjAddr: 0xB0, symBinAddr: 0x100001EA8, symSize: 0x10C }
+  - { offsetInCU: 0x124, offset: 0x124, size: 0x8, addend: 0x0, symName: _getNextText, symObjAddr: 0x1BC, symBinAddr: 0x100001FB4, symSize: 0xE4 }
+  - { offsetInCU: 0x184, offset: 0x184, size: 0x8, addend: 0x0, symName: _getNextObject, symObjAddr: 0x2A0, symBinAddr: 0x100002098, symSize: 0x1A0 }
+  - { offsetInCU: 0x200, offset: 0x200, size: 0x8, addend: 0x0, symName: _getNext, symObjAddr: 0x440, symBinAddr: 0x100002238, symSize: 0x170 }
+  - { offsetInCU: 0x244, offset: 0x244, size: 0x8, addend: 0x0, symName: _getObject, symObjAddr: 0x5B0, symBinAddr: 0x1000023A8, symSize: 0x37C }
+  - { offsetInCU: 0x306, offset: 0x306, size: 0x8, addend: 0x0, symName: _definePathType, symObjAddr: 0x92C, symBinAddr: 0x100002724, symSize: 0x11C }
+  - { offsetInCU: 0x32A, offset: 0x32A, size: 0x8, addend: 0x0, symName: _parsePath, symObjAddr: 0xA48, symBinAddr: 0x100002840, symSize: 0x3F0 }
+  - { offsetInCU: 0x3B4, offset: 0x3B4, size: 0x8, addend: 0x0, symName: _getJSONPath, symObjAddr: 0xE38, symBinAddr: 0x100002C30, symSize: 0x3C }
+  - { offsetInCU: 0x3FC, offset: 0x3FC, size: 0x8, addend: 0x0, symName: _printSubstring, symObjAddr: 0xE74, symBinAddr: 0x100002C6C, symSize: 0x78 }
+  - { offsetInCU: 0x43F, offset: 0x43F, size: 0x8, addend: 0x0, symName: _eqlSubstringVerbose, symObjAddr: 0xEEC, symBinAddr: 0x100002CE4, symSize: 0x98 }
+  - { offsetInCU: 0x487, offset: 0x487, size: 0x8, addend: 0x0, symName: _test_eqlSubstring, symObjAddr: 0xF84, symBinAddr: 0x100002D7C, symSize: 0x9C }
+  - { offsetInCU: 0x4DE, offset: 0x4DE, size: 0x8, addend: 0x0, symName: _test_getObject, symObjAddr: 0x1020, symBinAddr: 0x100002E18, symSize: 0x328 }
+  - { offsetInCU: 0x591, offset: 0x591, size: 0x8, addend: 0x0, symName: _test_parsePath, symObjAddr: 0x1348, symBinAddr: 0x100003140, symSize: 0x70C }
+  - { offsetInCU: 0x5EC, offset: 0x5EC, size: 0x8, addend: 0x0, symName: _run_all_test, symObjAddr: 0x1A54, symBinAddr: 0x10000384C, symSize: 0x128 }
+  - { offsetInCU: 0x625, offset: 0x625, size: 0x8, addend: 0x0, symName: _main, symObjAddr: 0x1B7C, symBinAddr: 0x100003974, symSize: 0x20 }
+...
