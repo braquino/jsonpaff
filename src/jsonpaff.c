@@ -3,13 +3,16 @@
 #include <string.h>
 #include <assert.h>
 #include <stdlib.h>
+#include <ctype.h>
 
 #define MAX_NSEG_PATH 20
+#define MAX_ELEM_LIST 300
 
 enum ErrorCode {
     OBJECT_NOT_FOUND_ERROR = 1001,
     BAD_PATH_ERROR = 1011,
-    NOT_IMPLEMENTED_ERROR = 1021
+    NOT_IMPLEMENTED_ERROR = 1021,
+    END_OF_OBJECT = 2001
 };
 
 typedef enum PathType {
@@ -19,6 +22,7 @@ typedef enum PathType {
 typedef struct Substring {
     char *ptr;
     size_t len;
+    char *tofree;
 } Substring;
 
 typedef struct PathSeg {
@@ -150,7 +154,9 @@ int getSubscript(Substring obj, int idx, Substring *output) {
         c = *(obj.ptr + i);
         if (init) {
             if (c != ',' && c != ' ' && c != '\t' && c != '\n') {
-                error = getNext((Substring){obj.ptr + i, obj.len - i}, &cur_obj);
+                if ((error = getNext((Substring){obj.ptr + i, obj.len - i}, &cur_obj))) {
+                    return error;
+                }
                 if (cur_idx == idx) {
                     output->ptr = cur_obj.ptr;
                     output->len = cur_obj.len;
@@ -171,15 +177,15 @@ int getSubscript(Substring obj, int idx, Substring *output) {
 }
 
 // 'output' an inner object with the 'prop' key, if error returns non zero
-int getObject(Substring obj, Substring prop, Substring *output) {
+int getObject(Substring obj, Substring prop, Substring *output, int anylvl) {
     int obj_open = 0;
     int8_t quoted = 0;
-    int8_t init = 0;
+    int8_t init = anylvl;
     int8_t found = 0;
 
     char c = 0;
     for (size_t i = 0; i < obj.len; i++) {
-        if (obj_open < 0) {
+        if (obj_open < 0 && !anylvl) {
             return OBJECT_NOT_FOUND_ERROR;
         }
         c = *(obj.ptr + i);
@@ -191,7 +197,7 @@ int getObject(Substring obj, Substring prop, Substring *output) {
             if (found) {
                 if (c != ':' && c != ' ' && c != '\t' && c != '\n') {
                     int error = getNext((Substring){obj.ptr + i, obj.len - i}, output);
-                    return 0;
+                    return error;
                 }
             } else {
                 if (!quoted) {
@@ -210,7 +216,7 @@ int getObject(Substring obj, Substring prop, Substring *output) {
                     if (c == '"') {
                         quoted = 0;
                     }
-                    if (obj_open == 0 && c == *prop.ptr && *(obj.ptr + i - 1) == '"' && eqlSubstring((Substring){obj.ptr + i, prop.len}, prop) && *(obj.ptr + i + prop.len) == '"') {
+                    if ((obj_open == 0 || anylvl) && c == *prop.ptr && *(obj.ptr + i - 1) == '"' && eqlSubstring((Substring){obj.ptr + i, prop.len}, prop) && *(obj.ptr + i + prop.len) == '"') {
                         found = 1;
                         i += prop.len;
                         continue;
@@ -238,7 +244,7 @@ void definePathType(PathSeg *seg) {
         seg->type = STAR;
         return;
     }
-    if (*(seg->sub.ptr) >= 48 && *(seg->sub.ptr) <= 57) {
+    if (isdigit(*(seg->sub.ptr))) {
         seg->type = SUBSCRIPT;
         return;
     }
@@ -253,8 +259,6 @@ int parsePath(Substring JSONPath, Path *output) {
         return BAD_PATH_ERROR;
     }
     int8_t quote_idx = 0;
-    int8_t sqr_idx = 0;
-    //int8_t point_idx = 0;
     size_t last_seg_idx = 0;
 
     char c = 0;
@@ -305,12 +309,36 @@ int parsePath(Substring JSONPath, Path *output) {
     return 0;
 }
 
+// add each obj to the string, return new idx
+int makeList(const Substring obj, int stridx, char strbuffer[]) {
+    if (stridx == 0) {
+        strbuffer[0] = '[';
+        stridx++;
+    }
+
+    if (obj.len == 0) {
+        strbuffer[stridx] = ']';
+        stridx++;
+    } else {
+        if (stridx > 1) {
+            memcpy((char*)strbuffer + stridx, ", " , 2);
+            stridx += 2;
+        }
+        memcpy((char*)strbuffer + stridx, obj.ptr, obj.len);
+        stridx += obj.len;
+    }
+
+    strbuffer[stridx + 1] = 0;
+    return stridx;
+}
+
 // Recursively finds and returns the next path segment
 int recPath(Substring obj, Path *path, int path_idx, Substring *output) {
     int error = 0;
+    int error_list = 0;
     if (path->len > path_idx) {
         if (path->segs[path_idx].type == KEY) {
-            error = getObject(obj, path->segs[path_idx].sub, output);
+            error = getObject(obj, path->segs[path_idx].sub, output, 0);
             if (error != 0) {
                 printf("error on getObject, code: %d\n", error);
                 return error;
@@ -330,6 +358,37 @@ int recPath(Substring obj, Path *path, int path_idx, Substring *output) {
                 return error;
             }
             return recPath(*output, path, path_idx+1, output);
+        }
+        if (path->segs[path_idx].type == ANYLVL) {
+            char *strbuff = malloc(obj.len + 100);
+            int n_el = 0;
+            int stridx = 0;
+            while ((error_list = getObject(obj, path->segs[path_idx + 1].sub, output, 1)) != OBJECT_NOT_FOUND_ERROR) {
+                if (!error_list) {
+                    error += recPath(*output, path, path_idx+2, output);
+                }
+                if (error_list) {
+                    printf("error getObject making a list, code: %d\n", error);
+                    break;
+                }
+                if (error) {
+                    printf("error recPath making a list, code: %d\n", error);
+                    break;
+                }
+                if (!error_list && !error) {
+                    stridx = makeList(*output, stridx, strbuff);
+                }
+                obj.len -= ((output->ptr + output->len) - obj.ptr);
+                obj.ptr += ((output->ptr + output->len) - obj.ptr);
+            }
+            if (error_list == OBJECT_NOT_FOUND_ERROR && !error) {
+                stridx = makeList((Substring){NULL, 0}, stridx, strbuff);
+            }
+            output->ptr = strbuff;
+            output->len = stridx;
+            output->tofree = strbuff;
+            
+            return error;
         }
         return NOT_IMPLEMENTED_ERROR;
     } else {
@@ -351,11 +410,12 @@ extern int getJSONPath(const char *obj, const char *JSONPath, char output[]) {
         printf("error retriving object code: %d\n", error);
         return error;
     }
-    // for (size_t i = 0; i < result.len; i++) {
-    //     output[i] = *(result.ptr + i);
-    // }
+
     memcpy(output, result.ptr, result.len);
     output[result.len] = 0;
+    if (result.tofree) {
+        free(result.tofree);
+    }
     return 0;
 }
 
@@ -369,8 +429,8 @@ void printSubstring(Substring s) {
 }
 
 int eqlSubstringVerbose(Substring a, Substring b) {
-    int compare = eqlSubstring(a, b);
-    if (!compare) {
+    int compare;
+    if (!(compare = eqlSubstring(a, b))) {
         printf("'");
         printSubstring(a);
         printf("' not equal '");
@@ -404,13 +464,13 @@ int test_getObject() {
     Substring obj = {j, strlen(j)};
     Substring output = {NULL, 0};
 
-    error = getObject(obj, (Substring){k1, strlen(k1)}, &output);
+    error = getObject(obj, (Substring){k1, strlen(k1)}, &output, 0);
     assert(error == 0);
     assert(eqlSubstringVerbose(output, (Substring){k1_expected, strlen(k1_expected)}));
-    error = getObject(obj, (Substring){k2, strlen(k2)}, &output);
+    error = getObject(obj, (Substring){k2, strlen(k2)}, &output, 0);
     assert(error == 0);
     assert(eqlSubstringVerbose(output, (Substring){k2_expected, strlen(k2_expected)}));
-    error = getObject(obj, (Substring){k3, strlen(k3)}, &output);
+    error = getObject(obj, (Substring){k3, strlen(k3)}, &output, 0);
     assert(error == 0);
     assert(eqlSubstringVerbose(output, (Substring){k3_expected, strlen(k3_expected)}));
     return 0;
@@ -490,6 +550,11 @@ int test_getJSONPath() {
     error = getJSONPath(jstr, path_3, result);
     assert(error == 0);
     assert(strcmp(result, "3") == 0);
+
+    char *path_4 = "$..hash";
+    error = getJSONPath(jstr, path_4, result);
+    assert(error == 0);
+    assert(strcmp(result, "[0, 1, 2, 3, 2]") == 0);
 
     return 0;
 }
